@@ -2360,12 +2360,10 @@ struct GridwiseAttentionAccelRewritePattern
         outAccBufferOutTyped = createBufferForGemmOut(
             loc, elemTypeOut, accelParamsGemm1, rewriter, gemm1MBlocks);
       }
-
-      FailureOr<ArrayAttr> invertedThreadSubTileViews =
+      maybeAttentionOutAccBufferThreadSubTileViewMaps =
           invertTransforms(rewriter, loc, gemm1OutSubTileViewsTr.threadSubTile);
-      if (succeeded(invertedThreadSubTileViews)) {
-        maybeAttentionOutAccBufferThreadSubTileViewMaps =
-            invertedThreadSubTileViews.value();
+      if (failed(maybeAttentionOutAccBufferThreadSubTileViewMaps)) {
+        return op.emitError("invertTransforms failed");
       }
       // m buffer; this only contains a reduced single value per row
       auto reducedBufferType =
@@ -2744,7 +2742,7 @@ struct GridwiseAttentionAccelRewritePattern
         FailureOr<ArrayAttr> maybeGemm0ThreadSubTileInvert = invertTransforms(
             rewriter, loc, gemm0OutSubTileViewsTr.threadSubTile);
         if (failed(maybeGemm0ThreadSubTileInvert)) {
-            return op.emitError("invertTransforms failed");
+          return op.emitError("invertTransforms failed");
         }
 
         // softmax normalization.
@@ -2774,7 +2772,7 @@ struct GridwiseAttentionAccelRewritePattern
         FailureOr<ArrayAttr> maybeThreadSubTileAttr = invertTransforms(
             rewriter, loc, gemm0OutSubTileViewsTr.threadSubTile);
         if (failed(maybeThreadSubTileAttr)) {
-            return op.emitError("invertTransforms failed");
+          return op.emitError("invertTransforms failed");
         }
         Value gemm0SumThreadwiseView = transform(
             rewriter, softmaxBufferSum, maybeThreadSubTileAttr.value());
@@ -2882,11 +2880,12 @@ struct GridwiseAttentionAccelRewritePattern
               FailureOr<ArrayAttr> gemm1ThreadwiseSubtileViewDxKMaps =
                   invertTransforms(rewriter, loc,
                                    gemm0OutSubTileViewsTr.threadSubTile);
-              if(failed(gemm1ThreadwiseSubtileViewDxKMaps)){
-                  return op.emitError("invertTransforms failed");
+              if (failed(gemm1ThreadwiseSubtileViewDxKMaps)) {
+                return op.emitError("invertTransforms failed");
               }
-              Value gemm1BDxKThreadwiseView = transform(
-                  rewriter, gemm1RegBufferB, gemm1ThreadwiseSubtileViewDxKMaps.value());
+              Value gemm1BDxKThreadwiseView =
+                  transform(rewriter, gemm1RegBufferB,
+                            gemm1ThreadwiseSubtileViewDxKMaps.value());
               affine::AffineForOp nRepeatsLoop = affine::AffineForOp::create(
                   rewriter, loc, 0, accelParamsGemm1.nRepeats, 1);
               {
@@ -3003,7 +3002,7 @@ struct GridwiseAttentionAccelRewritePattern
               rewriter, loc, attentionOutAccBuffer, g1MLoopIndVar);
         }
         if (failed(maybeAttentionOutAccBufferThreadSubTileViewMaps)) {
-           return op.emitError("invertTransforms failed");
+          return op.emitError("invertTransforms failed");
         }
         Value attentionOutAccBufferView =
             transform(rewriter, attentionOutAccBufferPerG1MBlock,
